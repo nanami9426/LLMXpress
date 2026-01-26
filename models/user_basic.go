@@ -43,8 +43,18 @@ func DeleteUser(user *UserBasic) (int64, error) {
 	return result.RowsAffected, result.Error
 }
 
-func UpdateUser(user *UserBasic) (int64, error) {
-	// result := utils.DB.Model(&UserBasic{}).Where("id=?", user.ID).Update("name", user.Name)
-	result := utils.DB.Model(&UserBasic{}).Where("id=?", user.ID).Updates(user)
+// func UpdateUser(user *UserBasic) (int64, error) {
+// 	// result := utils.DB.Model(&UserBasic{}).Where("id=?", user.ID).Update("name", user.Name)
+// 	result := utils.DB.Model(&UserBasic{}).Where("id=?", user.ID).Updates(user)
+// 	return result.RowsAffected, result.Error
+// }
+
+func UpdateUser(data map[string]interface{}) (int64, error) {
+	result := utils.DB.Model(&UserBasic{}).Where("id=?", data["ID"]).Updates(data)
 	return result.RowsAffected, result.Error
+}
+
+func EmailIsExists(email string) bool {
+	result := utils.DB.Where("email = ?", email).First(&UserBasic{})
+	return result.RowsAffected > 0
 }

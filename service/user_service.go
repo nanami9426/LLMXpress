@@ -141,17 +141,26 @@ func UpdateUser(c *gin.Context) {
 		})
 		return
 	}
-	user := &models.UserBasic{}
-	user.ID = req.UserID
-	user.Name = req.UserName
-	if !govalidator.IsEmail(req.Email) {
+	if !govalidator.IsEmail(req.Email) && "" != req.Email {
 		c.JSON(200, gin.H{
 			"message": "邮箱格式错误",
 		})
 		return
 	}
-	user.Email = req.Email
-	rows, err := models.UpdateUser(user)
+	data_update := map[string]interface{}{
+		"ID":   req.UserID,
+		"Name": req.UserName,
+	}
+	if "" != req.Email {
+		if models.EmailIsExists(req.Email) {
+			c.JSON(200, gin.H{
+				"message": "该邮箱已注册",
+			})
+			return
+		}
+		data_update["Email"] = req.Email
+	}
+	rows, err := models.UpdateUser(data_update)
 	if err != nil {
 		c.JSON(200, gin.H{
 			"message": "修改失败",
