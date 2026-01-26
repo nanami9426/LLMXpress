@@ -24,6 +24,11 @@ type UpdateUserReq struct {
 	Email    string `json:"email" form:"email"`
 }
 
+type UserLoginReq struct {
+	Email    string `json:"email" form:"email"`
+	Password string `json:"password" form:"password"`
+}
+
 // @Summary 用户列表
 // @Description 返回包含所有用户信息的列表
 // @Tags users
@@ -99,7 +104,7 @@ func DeleteUser(c *gin.Context) {
 	req := &DeleteUserReq{}
 	if err := c.ShouldBind(req); err != nil {
 		c.JSON(200, gin.H{
-			"message": "用户id格式错误",
+			"message": "参数错误",
 			"err":     err.Error(),
 		})
 		return
@@ -176,5 +181,40 @@ func UpdateUser(c *gin.Context) {
 	}
 	c.JSON(200, gin.H{
 		"message": "修改成功",
+	})
+}
+
+// @Summary 用户登录
+// @Tags users
+// @Produce json
+// @Router /user/user_login [post]
+// @param email formData string true "邮箱"
+// @param password formData string true "密码"
+func UserLogin(c *gin.Context) {
+	req := &UserLoginReq{}
+	if err := c.ShouldBind(req); err != nil {
+		c.JSON(200, gin.H{
+			"message": "参数错误",
+			"err":     err.Error(),
+		})
+		return
+	}
+	if !govalidator.IsEmail(req.Email) || !models.EmailIsExists(req.Email) {
+		c.JSON(200, gin.H{
+			"message": "邮箱格式有误或邮箱不存在",
+		})
+		return
+	}
+	user, _ := models.FindUserByEmail(req.Email)
+	hashed_password := user.Password
+	if !utils.CheckPassword(hashed_password, req.Password) {
+		c.JSON(200, gin.H{
+			"message": "密码错误",
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"message": "ok",
 	})
 }

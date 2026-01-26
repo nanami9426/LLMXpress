@@ -10,7 +10,7 @@ import (
 type UserBasic struct {
 	gorm.Model
 	Name          string
-	Password      string `json:"-"`
+	Password      string
 	Phone         string
 	Email         string
 	Identity      string
@@ -28,33 +28,38 @@ func (u *UserBasic) TableName() string {
 	return "user_basic"
 }
 
+// 获取所有用户列表
 func GetUserList() ([]*UserBasic, error) {
 	var user_list []*UserBasic
 	result := utils.DB.Find(&user_list)
 	return user_list, result.Error
 }
 
+// 创建新用户
 func CreateUser(user *UserBasic) error {
 	return utils.DB.Create(user).Error
 }
 
+// 逻辑删除用户
 func DeleteUser(user *UserBasic) (int64, error) {
 	result := utils.DB.Delete(user)
 	return result.RowsAffected, result.Error
 }
 
-// func UpdateUser(user *UserBasic) (int64, error) {
-// 	// result := utils.DB.Model(&UserBasic{}).Where("id=?", user.ID).Update("name", user.Name)
-// 	result := utils.DB.Model(&UserBasic{}).Where("id=?", user.ID).Updates(user)
-// 	return result.RowsAffected, result.Error
-// }
-
+// 更新用户信息
 func UpdateUser(data map[string]interface{}) (int64, error) {
 	result := utils.DB.Model(&UserBasic{}).Where("id=?", data["ID"]).Updates(data)
 	return result.RowsAffected, result.Error
 }
 
+// 判断邮箱是否存在
 func EmailIsExists(email string) bool {
 	result := utils.DB.Where("email = ?", email).First(&UserBasic{})
 	return result.RowsAffected > 0
+}
+
+func FindUserByEmail(email string) (UserBasic, int64) {
+	var user UserBasic
+	result := utils.DB.Where("email = ?", email).First(&user)
+	return user, result.RowsAffected
 }
