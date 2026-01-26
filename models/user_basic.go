@@ -10,6 +10,7 @@ import (
 type UserBasic struct {
 	gorm.Model
 	Name          string
+	UserID        int64 `gorm:"uniqueIndex"`
 	Password      string
 	Phone         string
 	Email         string

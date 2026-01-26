@@ -2,6 +2,7 @@ package service
 
 import (
 	"github.com/asaskevich/govalidator"
+	"github.com/bwmarrin/snowflake"
 	"github.com/gin-gonic/gin"
 	"github.com/nanami9426/imgo/models"
 	"github.com/nanami9426/imgo/utils"
@@ -82,7 +83,16 @@ func CreateUser(c *gin.Context) {
 		})
 		return
 	}
+	if models.EmailIsExists(req.Email) {
+		c.JSON(200, gin.H{
+			"message": "该邮箱已注册",
+		})
+		return
+	}
 	user.Email = req.Email
+	node, _ := snowflake.NewNode(1)
+	user_id := node.Generate().Int64()
+	user.UserID = user_id
 	if err := models.CreateUser(user); err != nil {
 		c.JSON(200, gin.H{
 			"message": "注册失败",

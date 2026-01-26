@@ -1,10 +1,8 @@
 package main
 
 import (
-	"crypto/rand"
 	"fmt"
 	"log"
-	"math/big"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -39,10 +37,10 @@ func main() {
 	db.AutoMigrate(&models.UserBasic{})
 
 	// Create
-	user := &models.UserBasic{}
-	user.Name = "测试"
-	db.Create(user)
-	psw, _ := rand.Int(rand.Reader, big.NewInt(100_000_000))
-	psw_str := fmt.Sprintf("%d", psw)
-	db.Model(user).Update("Password", psw_str)
+	// user := &models.UserBasic{}
+	// user.Name = "测试"
+	// db.Create(user)
+	// psw, _ := rand.Int(rand.Reader, big.NewInt(100_000_000))
+	// psw_str := fmt.Sprintf("%d", psw)
+	// db.Model(user).Update("Password", psw_str)
 }
