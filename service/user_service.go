@@ -38,13 +38,17 @@ func GetUserList(c *gin.Context) {
 	user_list, err := models.GetUserList()
 	if err != nil {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatDatabaseError,
+			"stat":      utils.StatText(utils.StatDatabaseError),
 			"message": "获取用户列表失败",
 			"err":     err.Error(),
 		})
 		return
 	}
 	c.JSON(200, gin.H{
-		"data": user_list,
+		"stat_code": utils.StatSuccess,
+		"stat":      utils.StatText(utils.StatSuccess),
+		"data":      user_list,
 	})
 }
 
@@ -60,6 +64,8 @@ func CreateUser(c *gin.Context) {
 	req := &CreateUserReq{}
 	if err := c.ShouldBind(req); err != nil {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatInvalidParam,
+			"stat":      utils.StatText(utils.StatInvalidParam),
 			"message": "参数错误",
 			"err":     err.Error(),
 		})
@@ -71,6 +77,8 @@ func CreateUser(c *gin.Context) {
 	re_password := req.RePassword
 	if password != re_password {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatInvalidParam,
+			"stat":      utils.StatText(utils.StatInvalidParam),
 			"message": "两次输入的密码不一致",
 		})
 		return
@@ -78,12 +86,16 @@ func CreateUser(c *gin.Context) {
 	user.Password, _ = utils.HashPassword(password)
 	if !govalidator.IsEmail(req.Email) {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatInvalidParam,
+			"stat":      utils.StatText(utils.StatInvalidParam),
 			"message": "邮箱格式错误",
 		})
 		return
 	}
 	if models.EmailIsExists(req.Email) {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatConflict,
+			"stat":      utils.StatText(utils.StatConflict),
 			"message": "该邮箱已注册",
 		})
 		return
@@ -93,13 +105,17 @@ func CreateUser(c *gin.Context) {
 	user.UserID = user_id
 	if err := models.CreateUser(user); err != nil {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatDatabaseError,
+			"stat":      utils.StatText(utils.StatDatabaseError),
 			"message": "注册失败",
 			"err":     err.Error(),
 		})
 		return
 	}
 	c.JSON(200, gin.H{
-		"message": "注册成功",
+		"stat_code": utils.StatSuccess,
+		"stat":      utils.StatText(utils.StatSuccess),
+		"message":   "注册成功",
 	})
 }
 
@@ -112,6 +128,8 @@ func DeleteUser(c *gin.Context) {
 	req := &DeleteUserReq{}
 	if err := c.ShouldBind(req); err != nil {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatInvalidParam,
+			"stat":      utils.StatText(utils.StatInvalidParam),
 			"message": "参数错误",
 			"err":     err.Error(),
 		})
@@ -120,6 +138,8 @@ func DeleteUser(c *gin.Context) {
 	user, rows := models.FindUserByUserID(req.UserID)
 	if rows == 0 {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatNotFound,
+			"stat":      utils.StatText(utils.StatNotFound),
 			"message": "用户不存在",
 		})
 		return
@@ -127,6 +147,8 @@ func DeleteUser(c *gin.Context) {
 	_, err := models.DeleteUser(&user)
 	if err != nil {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatDatabaseError,
+			"stat":      utils.StatText(utils.StatDatabaseError),
 			"message": "删除失败",
 			"err":     err.Error(),
 		})
@@ -134,7 +156,9 @@ func DeleteUser(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"message": "删除成功",
+		"stat_code": utils.StatSuccess,
+		"stat":      utils.StatText(utils.StatSuccess),
+		"message":   "删除成功",
 	})
 }
 
@@ -149,6 +173,8 @@ func UpdateUser(c *gin.Context) {
 	req := &UpdateUserReq{}
 	if err := c.ShouldBind(req); err != nil {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatInvalidParam,
+			"stat":      utils.StatText(utils.StatInvalidParam),
 			"message": "参数错误",
 			"err":     err.Error(),
 		})
@@ -156,6 +182,8 @@ func UpdateUser(c *gin.Context) {
 	}
 	if !govalidator.IsEmail(req.Email) && "" != req.Email {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatInvalidParam,
+			"stat":      utils.StatText(utils.StatInvalidParam),
 			"message": "邮箱格式错误",
 		})
 		return
@@ -167,6 +195,8 @@ func UpdateUser(c *gin.Context) {
 	if "" != req.Email {
 		if models.EmailIsExists(req.Email) {
 			c.JSON(200, gin.H{
+				"stat_code": utils.StatConflict,
+				"stat":      utils.StatText(utils.StatConflict),
 				"message": "该邮箱已注册",
 			})
 			return
@@ -176,6 +206,8 @@ func UpdateUser(c *gin.Context) {
 	rows, err := models.UpdateUser(data_update)
 	if err != nil {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatDatabaseError,
+			"stat":      utils.StatText(utils.StatDatabaseError),
 			"message": "修改失败",
 			"err":     err.Error(),
 		})
@@ -183,12 +215,16 @@ func UpdateUser(c *gin.Context) {
 	}
 	if rows == 0 {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatNotFound,
+			"stat":      utils.StatText(utils.StatNotFound),
 			"message": "用户不存在",
 		})
 		return
 	}
 	c.JSON(200, gin.H{
-		"message": "修改成功",
+		"stat_code": utils.StatSuccess,
+		"stat":      utils.StatText(utils.StatSuccess),
+		"message":   "修改成功",
 	})
 }
 
@@ -202,6 +238,8 @@ func UserLogin(c *gin.Context) {
 	req := &UserLoginReq{}
 	if err := c.ShouldBind(req); err != nil {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatInvalidParam,
+			"stat":      utils.StatText(utils.StatInvalidParam),
 			"message": "参数错误",
 			"err":     err.Error(),
 		})
@@ -209,6 +247,8 @@ func UserLogin(c *gin.Context) {
 	}
 	if !govalidator.IsEmail(req.Email) || !models.EmailIsExists(req.Email) {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatInvalidParam,
+			"stat":      utils.StatText(utils.StatInvalidParam),
 			"message": "邮箱格式有误或邮箱不存在",
 		})
 		return
@@ -217,12 +257,16 @@ func UserLogin(c *gin.Context) {
 	hashed_password := user.Password
 	if !utils.CheckPassword(hashed_password, req.Password) {
 		c.JSON(200, gin.H{
+			"stat_code": utils.StatUnauthorized,
+			"stat":      utils.StatText(utils.StatUnauthorized),
 			"message": "密码错误",
 		})
 		return
 	}
 
 	c.JSON(200, gin.H{
-		"message": "ok",
+		"stat_code": utils.StatSuccess,
+		"stat":      utils.StatText(utils.StatSuccess),
+		"message":   "ok",
 	})
 }

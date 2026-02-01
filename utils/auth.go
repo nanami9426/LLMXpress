@@ -30,11 +30,10 @@ func GenerateUserID() int64 {
 type Claims struct {
 	UserID uint   `json:"id"`
 	Role   string `json:"role"`
-	Email  string `json:"email"`
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(secret []byte, user_id uint, email string, ttl time.Duration) (string, error) {
+func GenerateToken(secret []byte, user_id uint, ttl time.Duration) (string, error) {
 
 	return "", nil
 }
