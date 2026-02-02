@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/bwmarrin/snowflake"
@@ -28,12 +29,22 @@ func GenerateUserID() int64 {
 }
 
 type Claims struct {
-	UserID uint   `json:"id"`
+	UserID uint   `json:"user_id"`
 	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
 func GenerateToken(secret []byte, user_id uint, ttl time.Duration) (string, error) {
-
-	return "", nil
+	now := time.Now().UTC()
+	claims := Claims{
+		UserID: user_id,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   strconv.FormatUint(uint64(user_id), 10), // 这个token代表的主体
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now), // 在这个时间之前token不允许被使用
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+		},
+	}
+	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return t.SignedString(secret)
 }
