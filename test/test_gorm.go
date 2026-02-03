@@ -1,5 +1,7 @@
 package main
 
+// 运行这个来生成表
+
 import (
 	"fmt"
 	"log"
@@ -35,4 +37,7 @@ func main() {
 
 	// Migrate the schema
 	db.AutoMigrate(&models.UserBasic{})
+	db.AutoMigrate(&models.ChatMessage{})
+	db.AutoMigrate(&models.Group{})
+	db.AutoMigrate(&models.UserRelationship{})
 }

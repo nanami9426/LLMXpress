@@ -26,7 +26,6 @@ var ug = websocket.Upgrader{
 func SendMessage(c *gin.Context) {
 	// 将 HTTP 连接升级为 WebSocket
 	// ws 在一次握手后建立长连接，服务端和客户端都可以随时发消息，不需要每次重新建连接。
-
 	ws, err := ug.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		c.JSON(400, gin.H{
@@ -87,7 +86,6 @@ func MessageHandler(ws *websocket.Conn, ctx context.Context) error {
 			// 从 Redis 收到消息后写回 WS
 			t := time.Now().Format("2006-01-02 15:04:05")
 			formatedMessage := fmt.Sprintf("[%s]: %s", t, msg.Payload)
-			fmt.Println("MessageHandler: ", formatedMessage)
 			if err := ws.WriteMessage(websocket.TextMessage, []byte(formatedMessage)); err != nil {
 				return err
 			}

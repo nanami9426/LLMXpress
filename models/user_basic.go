@@ -4,16 +4,13 @@ import (
 	"time"
 
 	"github.com/nanami9426/imgo/utils"
-	"gorm.io/gorm"
 )
 
 type UserBasic struct {
-	gorm.Model
-	Name          string
-	UserID        int64 `gorm:"uniqueIndex"`
-	Password      string
-	Phone         string
+	UserID        int64 `gorm:"primarykey"`
 	Email         string
+	Name          string
+	Phone         string
 	Identity      string
 	ClientIP      string
 	ClientPort    string
@@ -22,10 +19,12 @@ type UserBasic struct {
 	LogoutTime    *time.Time
 	IsLogout      bool
 	DeviceInfo    string
+	Basic
+	Password string
+	Avatar   string
 }
 
 func (u *UserBasic) TableName() string {
-
 	return "user_basic"
 }
 

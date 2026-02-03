@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"crypto/rand"
 	"errors"
+	"math/big"
 	"strconv"
 	"time"
 
@@ -31,10 +33,15 @@ func CheckPassword(hashed string, password string) bool {
 	return err == nil
 }
 
-func GenerateUserID() int64 {
+func GenerateID() int64 {
 	node, _ := snowflake.NewNode(1)
 	user_id := node.Generate().Int64()
 	return user_id
+}
+
+func GenerateUserID() int64 {
+	n, _ := rand.Int(rand.Reader, big.NewInt(900000000))
+	return n.Int64() + 100000000
 }
 
 type Claims struct {
