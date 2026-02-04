@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WS Chat Demo</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Arial; margin: 16px; }
+    .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    input, button { padding: 8px; font-size: 14px; }
+    #log { border: 1px solid #ddd; height: 340px; overflow: auto; padding: 8px; white-space: pre-wrap; }
+    .msg { margin: 6px 0; }
+    .me { text-align: right; }
+    .bubble { display: inline-block; max-width: 70%; padding: 8px 10px; border-radius: 12px; background: #f2f2f2; }
+    .me .bubble { background: #dff3ff; }
+    .meta { font-size: 12px; color: #666; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <h2>WebSocket Chat</h2>
+
+  <div class="row">
+    <input id="wsUrl" style="width:520px" placeholder="ws/wss URL" />
+    <button id="connectBtn">連線</button>
+    <button id="disconnectBtn" disabled>斷線</button>
+  </div>
+
+  <div class="row">
+    <input id="myId" placeholder="我的 user_id（用於前端判斷左右）" style="width:200px" />
+    <input id="toId" placeholder="對方 to_id" style="width:160px" />
+  </div>
+
+  <div class="row">
+    <input id="content" placeholder="輸入訊息..." style="width:520px" />
+    <button id="sendBtn" disabled>送出</button>
+  </div>
+
+  <div id="log"></div>
+
+<script>
+  let ws = null;
+
+  const $ = (id) => document.getElementById(id);
+  const log = $("log");
+
+  // 你要改這裡：放你的後端地址，帶 token（或 user_id）
+  // 例如：wss://example.com/chat/send_message?token=xxx
+  const WS_URL = "ws://localhost:8080/chat/send_message?user_id=1";
+
+  $("wsUrl").value = WS_URL;
+
+  function appendMessage({ mine, fromId, toId, content, timestamp, messageId }) {
+    const wrap = document.createElement("div");
+    wrap.className = "msg" + (mine ? " me" : "");
+    wrap.innerHTML = `
+      <div class="bubble">${escapeHtml(content)}</div>
+      <div class="meta">
+        from:${fromId} → to:${toId}
+        ${messageId ? " | id:" + messageId : ""}
+        ${timestamp ? " | " + timestamp : ""}
+      </div>
+    `;
+    log.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function appendSystem(text) {
+    const wrap = document.createElement("div");
+    wrap.className = "msg";
+    wrap.innerHTML = `<div class="meta">${escapeHtml(text)}</div>`;
+    log.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[c]));
+  }
+
+  $("connectBtn").onclick = () => {
+    const url = $("wsUrl").value.trim();
+    if (!url) return;
+
+    ws = new WebSocket(url);
+
+    ws.onopen = () => {
+      appendSystem("✅ 已連線");
+      $("sendBtn").disabled = false;
+      $("disconnectBtn").disabled = false;
+      $("connectBtn").disabled = true;
+    };
+
+    ws.onmessage = (ev) => {
+      // 服務端推來的就是 WSMessageOut JSON
+      try {
+        const data = JSON.parse(ev.data);
+        const myId = Number($("myId").value);
+        const mine = myId > 0 && data.from_id === myId;
+        appendMessage({
+          mine,
+          fromId: data.from_id,
+          toId: data.to_id,
+          content: data.content,
+          timestamp: data.timestamp,
+          messageId: data.message_id
+        });
+      } catch (e) {
+        appendSystem("⚠️ 收到非 JSON: " + ev.data);
+      }
+    };
+
+    ws.onerror = () => appendSystem("❌ 連線錯誤（看 console / 後端 log）");
+
+    ws.onclose = () => {
+      appendSystem("🔌 已斷線");
+      $("sendBtn").disabled = true;
+      $("disconnectBtn").disabled = true;
+      $("connectBtn").disabled = false;
+      ws = null;
+    };
+  };
+
+  $("disconnectBtn").onclick = () => {
+    if (ws) ws.close();
+  };
+
+  function send() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    const toId = Number($("toId").value);
+    const content = $("content").value;
+
+    const payload = {
+      to_id: toId,
+      content: content,
+      message_type: 0,
+      message_media: 0
+    };
+
+    ws.send(JSON.stringify(payload));
+    $("content").value = "";
+    $("content").focus();
+  }
+
+  $("sendBtn").onclick = send;
+  $("content").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") send();
+  });
+</script>
+</body>
+</html>
