@@ -18,7 +18,7 @@ var (
 	Ctx              = context.Background()
 	WSPublishKey     string
 	DefaultJWTSecret string
-	DefaultJWTTTL    = 60 * time.Second
+	DefaultJWTTTL    = 11160 * time.Second
 	TokenVersionMax  uint
 )
 
