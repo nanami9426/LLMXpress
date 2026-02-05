@@ -11,8 +11,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/nanami9426/imgo/models"
-	"github.com/nanami9426/imgo/utils"
+	"github.com/nanami9426/imgo/internal/models"
+	"github.com/nanami9426/imgo/internal/utils"
 )
 
 // ug 用于把 HTTP 请求升级为 WebSocket 连接。

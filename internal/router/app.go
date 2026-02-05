@@ -3,7 +3,7 @@ package router
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/nanami9426/imgo/docs"
-	"github.com/nanami9426/imgo/service"
+	"github.com/nanami9426/imgo/internal/service"
 	swaggerfiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )

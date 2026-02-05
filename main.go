@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/nanami9426/imgo/router"
-	"github.com/nanami9426/imgo/utils"
+	"github.com/nanami9426/imgo/internal/router"
+	"github.com/nanami9426/imgo/internal/utils"
 )
 
 func main() {

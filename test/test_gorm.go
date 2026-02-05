@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"github.com/nanami9426/imgo/models"
+	"github.com/nanami9426/imgo/internal/models"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )

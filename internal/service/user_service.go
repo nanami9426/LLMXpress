@@ -5,8 +5,8 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/gin-gonic/gin"
-	"github.com/nanami9426/imgo/models"
-	"github.com/nanami9426/imgo/utils"
+	"github.com/nanami9426/imgo/internal/models"
+	"github.com/nanami9426/imgo/internal/utils"
 )
 
 type CreateUserReq struct {

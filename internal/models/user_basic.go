@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"github.com/nanami9426/imgo/utils"
+	"github.com/nanami9426/imgo/internal/utils"
 )
 
 type UserBasic struct {
