@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -23,17 +22,19 @@ var ug = websocket.Upgrader{
 	},
 }
 
-// @Summary 发送消息
+// @Summary WebSocket 私聊
+// @Description 使用合法 token 连接后，客户端发送 JSON: {"to_id":1,"content":"hi"}
 // @Tags chat
 // @Produce json
-// @Router /chat/send_message [post]
+// @Param token query string false "JWT token (或使用 Authorization: Bearer <token>)"
+// @Router /chat/send_message [get]
 func SendMessage(c *gin.Context) {
 	userID, err := getUserIDFromRequest(c)
 	if err != nil {
 		c.JSON(200, gin.H{
 			"stat_code": utils.StatUnauthorized,
 			"stat":      utils.StatText(utils.StatUnauthorized),
-			"message":   "token或user_id无效",
+			"message":   "token无效",
 			"err":       err.Error(),
 		})
 		return
@@ -213,14 +214,5 @@ func getUserIDFromRequest(c *gin.Context) (int64, error) {
 		}
 		return int64(claims.UserID), nil
 	}
-
-	userIDStr := strings.TrimSpace(c.Query("user_id"))
-	if userIDStr == "" {
-		return 0, errors.New("missing token or user_id")
-	}
-	userID, err := strconv.ParseInt(userIDStr, 10, 64)
-	if err != nil || userID <= 0 {
-		return 0, errors.New("invalid user_id")
-	}
-	return userID, nil
+	return 0, errors.New("missing token")
 }
