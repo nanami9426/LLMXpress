@@ -1,11 +1,13 @@
 package service
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/gin-gonic/gin"
 	"github.com/nanami9426/imgo/internal/models"
+	"github.com/nanami9426/imgo/internal/response"
 	"github.com/nanami9426/imgo/internal/utils"
 )
 
@@ -43,19 +45,10 @@ type CheckTokenReq struct {
 func GetUserList(c *gin.Context) {
 	user_list, err := models.GetUserList()
 	if err != nil {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatDatabaseError,
-			"stat":      utils.StatText(utils.StatDatabaseError),
-			"message":   "获取用户列表失败",
-			"err":       err.Error(),
-		})
+		response.Fail(c, http.StatusOK, utils.StatDatabaseError, "获取用户列表失败", err)
 		return
 	}
-	c.JSON(200, gin.H{
-		"stat_code": utils.StatSuccess,
-		"stat":      utils.StatText(utils.StatSuccess),
-		"data":      user_list,
-	})
+	response.Success(c, user_list)
 }
 
 // @Summary 创建新用户
@@ -69,12 +62,7 @@ func GetUserList(c *gin.Context) {
 func CreateUser(c *gin.Context) {
 	req := &CreateUserReq{}
 	if err := c.ShouldBind(req); err != nil {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatInvalidParam,
-			"stat":      utils.StatText(utils.StatInvalidParam),
-			"message":   "参数错误",
-			"err":       err.Error(),
-		})
+		response.Fail(c, http.StatusOK, utils.StatInvalidParam, "参数错误", err)
 		return
 	}
 	user := &models.UserBasic{}
@@ -82,47 +70,26 @@ func CreateUser(c *gin.Context) {
 	password := req.Password
 	re_password := req.RePassword
 	if password != re_password {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatInvalidParam,
-			"stat":      utils.StatText(utils.StatInvalidParam),
-			"message":   "两次输入的密码不一致",
-		})
+		response.Fail(c, http.StatusOK, utils.StatInvalidParam, "两次输入的密码不一致", nil)
 		return
 	}
 	user.Password, _ = utils.HashPassword(password)
 	if !govalidator.IsEmail(req.Email) {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatInvalidParam,
-			"stat":      utils.StatText(utils.StatInvalidParam),
-			"message":   "邮箱格式错误",
-		})
+		response.Fail(c, http.StatusOK, utils.StatInvalidParam, "邮箱格式错误", nil)
 		return
 	}
 	if models.EmailIsExists(req.Email) {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatConflict,
-			"stat":      utils.StatText(utils.StatConflict),
-			"message":   "该邮箱已注册",
-		})
+		response.Fail(c, http.StatusOK, utils.StatConflict, "该邮箱已注册", nil)
 		return
 	}
 	user.Email = req.Email
 	user_id := utils.GenerateUserID()
 	user.UserID = user_id
 	if err := models.CreateUser(user); err != nil {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatDatabaseError,
-			"stat":      utils.StatText(utils.StatDatabaseError),
-			"message":   "注册失败",
-			"err":       err.Error(),
-		})
+		response.Fail(c, http.StatusOK, utils.StatDatabaseError, "注册失败", err)
 		return
 	}
-	c.JSON(200, gin.H{
-		"stat_code": utils.StatSuccess,
-		"stat":      utils.StatText(utils.StatSuccess),
-		"message":   "注册成功",
-	})
+	response.SuccessMessage(c, "注册成功")
 }
 
 // @Summary 删除用户
@@ -133,39 +100,21 @@ func CreateUser(c *gin.Context) {
 func DeleteUser(c *gin.Context) {
 	req := &DeleteUserReq{}
 	if err := c.ShouldBind(req); err != nil {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatInvalidParam,
-			"stat":      utils.StatText(utils.StatInvalidParam),
-			"message":   "参数错误",
-			"err":       err.Error(),
-		})
+		response.Fail(c, http.StatusOK, utils.StatInvalidParam, "参数错误", err)
 		return
 	}
 	user, rows := models.FindUserByUserID(req.UserID)
 	if rows == 0 {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatNotFound,
-			"stat":      utils.StatText(utils.StatNotFound),
-			"message":   "用户不存在",
-		})
+		response.Fail(c, http.StatusOK, utils.StatNotFound, "用户不存在", nil)
 		return
 	}
 	_, err := models.DeleteUser(&user)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatDatabaseError,
-			"stat":      utils.StatText(utils.StatDatabaseError),
-			"message":   "删除失败",
-			"err":       err.Error(),
-		})
+		response.Fail(c, http.StatusOK, utils.StatDatabaseError, "删除失败", err)
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"stat_code": utils.StatSuccess,
-		"stat":      utils.StatText(utils.StatSuccess),
-		"message":   "删除成功",
-	})
+	response.SuccessMessage(c, "删除成功")
 }
 
 // @Summary 更新用户信息
@@ -178,20 +127,11 @@ func DeleteUser(c *gin.Context) {
 func UpdateUser(c *gin.Context) {
 	req := &UpdateUserReq{}
 	if err := c.ShouldBind(req); err != nil {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatInvalidParam,
-			"stat":      utils.StatText(utils.StatInvalidParam),
-			"message":   "参数错误",
-			"err":       err.Error(),
-		})
+		response.Fail(c, http.StatusOK, utils.StatInvalidParam, "参数错误", err)
 		return
 	}
 	if !govalidator.IsEmail(req.Email) && "" != req.Email {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatInvalidParam,
-			"stat":      utils.StatText(utils.StatInvalidParam),
-			"message":   "邮箱格式错误",
-		})
+		response.Fail(c, http.StatusOK, utils.StatInvalidParam, "邮箱格式错误", nil)
 		return
 	}
 	data_update := map[string]interface{}{
@@ -200,38 +140,21 @@ func UpdateUser(c *gin.Context) {
 	}
 	if "" != req.Email {
 		if models.EmailIsExists(req.Email) {
-			c.JSON(200, gin.H{
-				"stat_code": utils.StatConflict,
-				"stat":      utils.StatText(utils.StatConflict),
-				"message":   "该邮箱已注册",
-			})
+			response.Fail(c, http.StatusOK, utils.StatConflict, "该邮箱已注册", nil)
 			return
 		}
 		data_update["Email"] = req.Email
 	}
 	rows, err := models.UpdateUser(data_update)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatDatabaseError,
-			"stat":      utils.StatText(utils.StatDatabaseError),
-			"message":   "修改失败",
-			"err":       err.Error(),
-		})
+		response.Fail(c, http.StatusOK, utils.StatDatabaseError, "修改失败", err)
 		return
 	}
 	if rows == 0 {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatNotFound,
-			"stat":      utils.StatText(utils.StatNotFound),
-			"message":   "用户不存在",
-		})
+		response.Fail(c, http.StatusOK, utils.StatNotFound, "用户不存在", nil)
 		return
 	}
-	c.JSON(200, gin.H{
-		"stat_code": utils.StatSuccess,
-		"stat":      utils.StatText(utils.StatSuccess),
-		"message":   "修改成功",
-	})
+	response.SuccessMessage(c, "修改成功")
 }
 
 // @Summary 用户登录
@@ -243,30 +166,17 @@ func UpdateUser(c *gin.Context) {
 func UserLogin(c *gin.Context) {
 	req := &UserLoginReq{}
 	if err := c.ShouldBind(req); err != nil {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatInvalidParam,
-			"stat":      utils.StatText(utils.StatInvalidParam),
-			"message":   "参数错误",
-			"err":       err.Error(),
-		})
+		response.Fail(c, http.StatusOK, utils.StatInvalidParam, "参数错误", err)
 		return
 	}
 	if !govalidator.IsEmail(req.Email) || !models.EmailIsExists(req.Email) {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatInvalidParam,
-			"stat":      utils.StatText(utils.StatInvalidParam),
-			"message":   "邮箱格式有误或邮箱不存在",
-		})
+		response.Fail(c, http.StatusOK, utils.StatInvalidParam, "邮箱格式有误或邮箱不存在", nil)
 		return
 	}
 	user, _ := models.FindUserByEmail(req.Email)
 	hashed_password := user.Password
 	if !utils.CheckPassword(hashed_password, req.Password) {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatUnauthorized,
-			"stat":      utils.StatText(utils.StatUnauthorized),
-			"message":   "密码错误",
-		})
+		response.Fail(c, http.StatusOK, utils.StatUnauthorized, "密码错误", nil)
 		return
 	}
 	role := user.Identity
@@ -276,42 +186,27 @@ func UserLogin(c *gin.Context) {
 
 	version, err := utils.GetTokenVersion(c, uint(user.UserID))
 	if err != nil {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatInternalError,
-			"stat":      utils.StatText(utils.StatInternalError),
-			"err":       err.Error(),
-		})
+		response.Fail(c, http.StatusOK, utils.StatInternalError, "内部错误", err)
 		return
 	}
 	version = (version + 1) % utils.TokenVersionMax
 
 	token, err := utils.GenerateToken(utils.JWTSecret(), uint(user.UserID), role, utils.JWTTTL(), version)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatInternalError,
-			"stat":      utils.StatText(utils.StatInternalError),
-			"message":   "生成token失败",
-			"err":       err.Error(),
-		})
+		response.Fail(c, http.StatusOK, utils.StatInternalError, "生成token失败", err)
 		return
 	}
 
 	_, err = utils.IncrTokenVersion(c, uint(user.UserID))
 	if err != nil {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatInternalError,
-			"stat":      utils.StatText(utils.StatInternalError),
-			"err":       err.Error(),
-		})
+		response.Fail(c, http.StatusOK, utils.StatInternalError, "内部错误", err)
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"stat_code": utils.StatSuccess,
-		"stat":      utils.StatText(utils.StatSuccess),
-		"token":     token,
-		"version":   version,
-		"user_id":   user.UserID,
+	response.Success(c, gin.H{
+		"token":   token,
+		"version": version,
+		"user_id": user.UserID,
 	})
 }
 
@@ -335,11 +230,7 @@ func CheckToken(c *gin.Context) {
 		token = strings.TrimSpace(req.Token)
 	}
 	if token == "" {
-		c.JSON(401, gin.H{
-			"stat_code": utils.StatInvalidParam,
-			"stat":      utils.StatText(utils.StatInvalidParam),
-			"message":   "token不能为空",
-		})
+		response.Fail(c, http.StatusUnauthorized, utils.StatInvalidParam, "token不能为空", nil)
 		return
 	}
 	uintDiff := func(a, b uint) uint {
@@ -351,23 +242,14 @@ func CheckToken(c *gin.Context) {
 	claims, err := utils.CheckToken(token, utils.JWTSecret())
 
 	if err != nil {
-		c.JSON(401, gin.H{
-			"stat_code": utils.StatUnauthorized,
-			"stat":      utils.StatText(utils.StatUnauthorized),
-			"message":   "token无效或已过期",
-			"err":       err.Error(),
-		})
+		response.Fail(c, http.StatusUnauthorized, utils.StatUnauthorized, "token无效或已过期", err)
 		return
 	}
 
 	latest_version, _ := utils.GetTokenVersion(c, claims.UserID)
 	diff := uintDiff(latest_version, claims.Version)
 	if diff >= utils.LoginDeviceMax {
-		c.JSON(401, gin.H{
-			"stat_code": utils.StatUnauthorized,
-			"stat":      utils.StatText(utils.StatUnauthorized),
-			"message":   "登录设备达到上限",
-		})
+		response.Fail(c, http.StatusUnauthorized, utils.StatUnauthorized, "登录设备达到上限", nil)
 		return
 	}
 
@@ -375,11 +257,9 @@ func CheckToken(c *gin.Context) {
 	if claims.ExpiresAt != nil {
 		exp = claims.ExpiresAt.Unix()
 	}
-	c.JSON(200, gin.H{
-		"stat_code": utils.StatSuccess,
-		"stat":      utils.StatText(utils.StatSuccess),
-		"user_id":   claims.UserID,
-		"role":      claims.Role,
-		"exp":       exp,
+	response.Success(c, gin.H{
+		"user_id": claims.UserID,
+		"role":    claims.Role,
+		"exp":     exp,
 	})
 }

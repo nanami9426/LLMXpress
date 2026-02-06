@@ -12,13 +12,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/nanami9426/imgo/internal/models"
+	"github.com/nanami9426/imgo/internal/response"
 	"github.com/nanami9426/imgo/internal/utils"
 )
 
 // ug 用于把 HTTP 请求升级为 WebSocket 连接。
 var ug = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		_, ok := utils.AllowedOrigins[origin]
+		return ok
 	},
 }
 
@@ -31,12 +37,7 @@ var ug = websocket.Upgrader{
 func SendMessage(c *gin.Context) {
 	userID, err := getUserIDFromRequest(c)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"stat_code": utils.StatUnauthorized,
-			"stat":      utils.StatText(utils.StatUnauthorized),
-			"message":   "token无效",
-			"err":       err.Error(),
-		})
+		response.Fail(c, http.StatusOK, utils.StatUnauthorized, "token无效", err)
 		return
 	}
 
@@ -44,11 +45,7 @@ func SendMessage(c *gin.Context) {
 	// ws 在一次握手后建立长连接，服务端和客户端都可以随时发消息，不需要每次重新建连接。
 	ws, err := ug.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		c.JSON(400, gin.H{
-			"err":       err.Error(),
-			"stat_code": utils.StatInternalError,
-			"stat":      utils.StatText(utils.StatInternalError),
-		})
+		response.Fail(c, http.StatusBadRequest, utils.StatInternalError, "升级WebSocket失败", err)
 		return
 	}
 	defer ws.Close()

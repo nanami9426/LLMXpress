@@ -1,6 +1,9 @@
 package service
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/nanami9426/imgo/internal/response"
+)
 
 type GetIndexResp struct {
 	Message string `json:"message" example:"hello"`
@@ -13,7 +16,5 @@ type GetIndexResp struct {
 // @Success 200 {object} GetIndexResp
 // @Router /healthz [get]
 func Healthz(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"message": "hello",
-	})
+	response.Success(c, gin.H{"message": "hello"})
 }

@@ -12,6 +12,12 @@ import (
 )
 
 var V = viper.New()
+
+var AllowedOrigins = map[string]struct{}{
+	"http://localhost:5173": {},
+	"http://127.0.0.1:5173": {},
+}
+
 var (
 	DB               *gorm.DB
 	RDB              *redis.Client

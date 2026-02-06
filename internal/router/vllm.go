@@ -6,6 +6,8 @@ import (
 	"net/url"
 
 	"github.com/gin-gonic/gin"
+	"github.com/nanami9426/imgo/internal/response"
+	"github.com/nanami9426/imgo/internal/utils"
 )
 
 func RigisterVLLMRoutes(r *gin.Engine) {
@@ -22,9 +24,7 @@ func ProxyToVLLM() gin.HandlerFunc {
 	if err != nil || target.Scheme == "" || target.Host == "" {
 		// 启动时配置有问题，直接返回handler，所有请求500
 		return func(c *gin.Context) {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"error": "invalid VLLM_URL: " + upstream,
-			})
+			response.Abort(c, http.StatusInternalServerError, utils.StatInternalError, "invalid VLLM_URL: "+upstream, nil)
 		}
 	}
 

@@ -1,22 +1,24 @@
 package router
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/nanami9426/imgo/internal/response"
 	"github.com/nanami9426/imgo/internal/utils"
 )
 
-var allowedOrigins = map[string]struct{}{
-	"http://localhost:5173": {},
-	"http://127.0.0.1:5173": {},
-}
+/*
+	普通业务handler：用Fail+return。
+	中间件/鉴权：必须用Abort，确保后面的handler不会继续跑。
+*/
 
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 		if origin != "" {
-			if _, ok := allowedOrigins[origin]; ok {
+			if _, ok := utils.AllowedOrigins[origin]; ok {
 				c.Header("Access-Control-Allow-Origin", origin)
 				c.Header("Vary", "Origin")
 				c.Header("Access-Control-Allow-Credentials", "true")
@@ -50,22 +52,13 @@ func AuthMiddleware() gin.HandlerFunc {
 			导致后面再转发请求时body可能已经被消费了。
 		*/
 		if token == "" {
-			c.AbortWithStatusJSON(401, gin.H{
-				"stat_code": utils.StatUnauthorized,
-				"stat":      utils.StatText(utils.StatUnauthorized),
-				"message":   "token不能为空",
-			})
+			response.Abort(c, http.StatusUnauthorized, utils.StatUnauthorized, "token不能为空", nil)
 			return
 		}
 
 		claims, err := utils.CheckToken(token, utils.JWTSecret())
 		if err != nil {
-			c.AbortWithStatusJSON(401, gin.H{
-				"stat_code": utils.StatUnauthorized,
-				"stat":      utils.StatText(utils.StatUnauthorized),
-				"message":   "token无效或已过期",
-				"err":       err.Error(),
-			})
+			response.Abort(c, http.StatusUnauthorized, utils.StatUnauthorized, "token无效或已过期", err)
 			return
 		}
 
@@ -78,11 +71,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		}(latestVersion, claims.Version)
 
 		if diff >= utils.LoginDeviceMax {
-			c.AbortWithStatusJSON(401, gin.H{
-				"stat_code": utils.StatUnauthorized,
-				"stat":      utils.StatText(utils.StatUnauthorized),
-				"message":   "登录设备达到上限",
-			})
+			response.Abort(c, http.StatusUnauthorized, utils.StatUnauthorized, "登录设备达到上限", nil)
 			return
 		}
 

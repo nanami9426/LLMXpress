@@ -8,6 +8,6 @@ import (
 func RigisterChatRoutes(r *gin.Engine) {
 	chat := r.Group("/chat")
 	{
-		chat.GET("/sent_message", service.SendMessage)
+		chat.GET("/send_message", service.SendMessage)
 	}
 }
