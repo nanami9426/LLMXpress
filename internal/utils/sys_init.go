@@ -18,7 +18,7 @@ var (
 	Ctx              = context.Background()
 	WSPublishKey     string
 	DefaultJWTSecret string
-	DefaultJWTTTL    = 30000 * time.Second
+	DefaultJWTTTL    time.Duration
 	TokenVersionMax  uint
 	LoginDeviceMax   uint
 )
@@ -31,7 +31,7 @@ func InitParam() {
 	DefaultJWTSecret = V.GetString("jwt.secret")
 	TokenVersionMax = V.GetUint("token_version_max.n")
 	LoginDeviceMax = V.GetUint("login_device_max.n")
-
+	DefaultJWTTTL = time.Duration(V.GetUint("jwt.ttl_h")) * time.Hour
 }
 
 func InitConfig() {
