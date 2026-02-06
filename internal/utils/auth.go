@@ -50,7 +50,7 @@ func GenerateUserID() int64 {
 type Claims struct {
 	UserID  uint   `json:"user_id"`
 	Role    string `json:"role"`
-	Version uint
+	Version uint   `json:"version"`
 	jwt.RegisteredClaims
 }
 

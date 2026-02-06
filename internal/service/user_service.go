@@ -335,7 +335,7 @@ func CheckToken(c *gin.Context) {
 		token = strings.TrimSpace(req.Token)
 	}
 	if token == "" {
-		c.JSON(200, gin.H{
+		c.JSON(401, gin.H{
 			"stat_code": utils.StatInvalidParam,
 			"stat":      utils.StatText(utils.StatInvalidParam),
 			"message":   "token不能为空",
@@ -351,7 +351,7 @@ func CheckToken(c *gin.Context) {
 	claims, err := utils.CheckToken(token, utils.JWTSecret())
 
 	if err != nil {
-		c.JSON(200, gin.H{
+		c.JSON(401, gin.H{
 			"stat_code": utils.StatUnauthorized,
 			"stat":      utils.StatText(utils.StatUnauthorized),
 			"message":   "token无效或已过期",
@@ -359,10 +359,11 @@ func CheckToken(c *gin.Context) {
 		})
 		return
 	}
+
 	latest_version, _ := utils.GetTokenVersion(c, claims.UserID)
 	diff := uintDiff(latest_version, claims.Version)
 	if diff >= utils.LoginDeviceMax {
-		c.JSON(200, gin.H{
+		c.JSON(401, gin.H{
 			"stat_code": utils.StatUnauthorized,
 			"stat":      utils.StatText(utils.StatUnauthorized),
 			"message":   "登录设备达到上限",
