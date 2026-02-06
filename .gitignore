@@ -41,3 +41,6 @@ docs/swagger.yaml
 
 # uv
 .venv
+
+# logs
+*.log

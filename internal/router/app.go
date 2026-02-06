@@ -11,11 +11,11 @@ func Router() *gin.Engine {
 	r.Use(CORSMiddleware())
 
 	docs.SwaggerInfo.BasePath = "/"
-	r.GET("/index", service.GetIndex)
+	r.GET("/healthz", service.Healthz)
 
 	RegisterSwagger(r)
 	RegisterUserRoutes(r)
 	RigisterChatRoutes(r)
-	RigisterLLMRoutes(r)
+	RigisterVLLMRoutes(r)
 	return r
 }

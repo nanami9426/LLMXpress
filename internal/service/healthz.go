@@ -11,8 +11,8 @@ type GetIndexResp struct {
 // @Tags example
 // @Produce json
 // @Success 200 {object} GetIndexResp
-// @Router /index [get]
-func GetIndex(c *gin.Context) {
+// @Router /healthz [get]
+func Healthz(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"message": "hello",
 	})
