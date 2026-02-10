@@ -111,6 +111,7 @@ type openAIError struct {
 
 type openAIResp struct {
 	Model string       `json:"model"`
+	ID    string       `json:"id"`
 	Usage *openAIUsage `json:"usage"`
 	Error *openAIError `json:"error"`
 }
@@ -131,6 +132,9 @@ func parseNumber(n *json.Number) (int, bool) {
 func applyModelAndError(resp *openAIResp, usage *models.APIUsage) {
 	if resp == nil || usage == nil {
 		return
+	}
+	if resp.ID != "" {
+		usage.CompletionID = resp.ID
 	}
 	if resp.Model != "" {
 		usage.Model = resp.Model
@@ -178,6 +182,7 @@ func parseOpenAISSE(body []byte) (*openAIResp, bool) {
 	lines := bytes.Split(body, []byte("\n"))
 	var last *openAIResp
 	var lastWithUsage *openAIResp
+	lastID := ""
 	var dataBuf []byte
 	flush := func() {
 		if len(dataBuf) == 0 {
@@ -195,7 +200,13 @@ func parseOpenAISSE(body []byte) (*openAIResp, bool) {
 			return
 		}
 		last = &resp
+		if resp.ID != "" {
+			lastID = resp.ID
+		}
 		if resp.Usage != nil {
+			if resp.ID == "" && lastID != "" {
+				resp.ID = lastID
+			}
 			lastWithUsage = &resp
 		}
 	}
@@ -222,6 +233,9 @@ func parseOpenAISSE(body []byte) (*openAIResp, bool) {
 		return lastWithUsage, true
 	}
 	if last != nil {
+		if last.ID == "" && lastID != "" {
+			last.ID = lastID
+		}
 		return last, true
 	}
 	return nil, false

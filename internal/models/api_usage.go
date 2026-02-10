@@ -8,6 +8,7 @@ import (
 
 type APIUsage struct {
 	UsageID       int64     `gorm:"primarykey"`
+	CompletionID  string    // 对话ID
 	UserID        int64     `gorm:"index"` // 用户ID
 	Endpoint      string    // 调用的端点（如 /v1/chat/completions）
 	Model         string    // 使用的模型名称
