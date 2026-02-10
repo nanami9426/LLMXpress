@@ -41,4 +41,6 @@ func main() {
 	db.AutoMigrate(&models.Group{})
 	db.AutoMigrate(&models.UserRelationship{})
 	db.AutoMigrate(&models.APIUsage{})
+	db.AutoMigrate(&models.LLMConversation{})
+	db.AutoMigrate(&models.LLMConversationMessage{})
 }

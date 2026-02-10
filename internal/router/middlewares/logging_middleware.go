@@ -37,6 +37,7 @@ func APILoggingMiddleware() gin.HandlerFunc {
 
 		// 继续处理请求
 		c.Next()
+		c.Set(contextKeyChatCompletionResponseBody, append([]byte(nil), writer.body...))
 
 		// 计算耗时
 		latency := time.Since(startTime).Milliseconds()

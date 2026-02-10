@@ -73,8 +73,16 @@ WebSocket 私聊：
 
 vLLM 代理（需要鉴权）：
 - `POST /v1/chat/completions`
+- `GET /v1/conversations`
+- `GET /v1/conversations/:conversation_id/messages`
 - `ANY /v1/:path`
 - `ANY /v1/:path/*any`
+
+会话续聊扩展（网关自定义字段）：
+- 在 `POST /v1/chat/completions` 的 JSON body 中可选传：
+  - `conversation_id`：指定历史会话续聊
+  - `new_chat`：`true` 时强制新建会话
+- 响应头会返回 `X-Conversation-ID`（前端可用于后续续聊）
 
 **WebSocket**
 - 连接方式（优先级）：`Sec-WebSocket-Protocol: authorization.bearer.<JWT>` 或 `authorization.bearer.b64.<base64url(JWT)>`，其次 `GET /chat/send_message?token=<JWT>`，最后 `Authorization: Bearer <JWT>`。
@@ -94,6 +102,7 @@ vLLM 代理（需要鉴权）：
 **Usage Logging**
 - `/v1` 相关请求会通过 `APILoggingMiddleware` 写入 `api_usage` 表。
 - 支持从 OpenAI 风格 JSON 或 SSE 流中解析 Token 使用情况。
+- `/v1/chat/completions` 请求会自动写入会话历史（`llm_conversation`、`llm_conversation_message`）。
 
 **Swagger**
 默认已集成 Swagger UI：`/swagger/index.html`。如果需要重新生成文档：
