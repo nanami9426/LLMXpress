@@ -11,9 +11,18 @@ import (
 	"github.com/nanami9426/imgo/internal/utils"
 )
 
+func shouldLogAPIPath(path string) bool {
+	return path == "/v1/chat/completions"
+}
+
 // 记录 API 调用的中间件
 func APILoggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !shouldLogAPIPath(c.Request.URL.Path) {
+			c.Next()
+			return
+		}
+
 		startTime := time.Now()
 
 		// 记录请求体大小
