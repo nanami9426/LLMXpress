@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,18 +32,23 @@ var ug = websocket.Upgrader{
 // @Description 使用合法 token 连接后，客户端发送 JSON: {"to_id":1,"content":"hi"}
 // @Tags chat
 // @Produce json
-// @Param token query string false "JWT token (或使用 Authorization: Bearer <token>)"
+// @Param token query string false "JWT token (或使用 Authorization: Bearer <token> / Sec-WebSocket-Protocol: authorization.bearer.<token>|authorization.bearer.b64.<token>)"
 // @Router /chat/send_message [get]
 func SendMessage(c *gin.Context) {
-	userID, err := getUserIDFromRequest(c)
+	userID, wsProtocol, err := getUserIDFromRequest(c)
 	if err != nil {
 		utils.Fail(c, http.StatusOK, utils.StatUnauthorized, "token无效", err)
 		return
 	}
 
+	var respHeader http.Header
+	if wsProtocol != "" {
+		respHeader = http.Header{}
+		respHeader.Set("Sec-WebSocket-Protocol", wsProtocol)
+	}
 	// 将 HTTP 连接升级为 WebSocket
 	// ws 在一次握手后建立长连接，服务端和客户端都可以随时发消息，不需要每次重新建连接。
-	ws, err := ug.Upgrade(c.Writer, c.Request, nil)
+	ws, err := ug.Upgrade(c.Writer, c.Request, respHeader)
 	if err != nil {
 		utils.Fail(c, http.StatusBadRequest, utils.StatInternalError, "升级WebSocket失败", err)
 		return
@@ -195,8 +201,18 @@ func userChannel(userID int64) string {
 	return fmt.Sprintf("%s:user:%d", utils.WSPublishKey, userID)
 }
 
-func getUserIDFromRequest(c *gin.Context) (int64, error) {
-	token := strings.TrimSpace(c.Query("token"))
+func getUserIDFromRequest(c *gin.Context) (int64, string, error) {
+	token := ""
+	wsProtocol := ""
+
+	var err error
+	token, wsProtocol, err = tokenFromWSProtocol(c.Request)
+	if err != nil {
+		return 0, "", err
+	}
+	if token == "" {
+		token = strings.TrimSpace(c.Query("token"))
+	}
 	if token == "" {
 		token = strings.TrimSpace(c.GetHeader("Authorization"))
 	}
@@ -206,9 +222,64 @@ func getUserIDFromRequest(c *gin.Context) (int64, error) {
 	if token != "" {
 		claims, err := utils.CheckToken(token, utils.JWTSecret())
 		if err != nil {
-			return 0, err
+			return 0, "", err
 		}
-		return int64(claims.UserID), nil
+		return int64(claims.UserID), wsProtocol, nil
 	}
-	return 0, errors.New("missing token")
+	return 0, "", errors.New("missing token")
+}
+
+func tokenFromWSProtocol(r *http.Request) (string, string, error) {
+	protocols := websocket.Subprotocols(r)
+	if len(protocols) == 0 {
+		return "", "", nil
+	}
+
+	const (
+		prefixBearer    = "authorization.bearer."
+		prefixBearerB64 = "authorization.bearer.b64."
+	)
+
+	for _, p := range protocols {
+		raw := strings.TrimSpace(p)
+		if raw == "" {
+			continue
+		}
+		lower := strings.ToLower(raw)
+		switch {
+		case strings.HasPrefix(lower, prefixBearerB64):
+			enc := strings.TrimSpace(raw[len(prefixBearerB64):])
+			if enc == "" {
+				return "", "", errors.New("missing token")
+			}
+			dec, err := decodeBase64Token(enc)
+			if err != nil {
+				return "", "", err
+			}
+			return dec, raw, nil
+		case strings.HasPrefix(lower, prefixBearer):
+			token := strings.TrimSpace(raw[len(prefixBearer):])
+			if token == "" {
+				return "", "", errors.New("missing token")
+			}
+			return token, raw, nil
+		}
+	}
+	return "", "", nil
+}
+
+func decodeBase64Token(enc string) (string, error) {
+	if b, err := base64.RawURLEncoding.DecodeString(enc); err == nil {
+		return string(b), nil
+	}
+	if b, err := base64.URLEncoding.DecodeString(enc); err == nil {
+		return string(b), nil
+	}
+	if b, err := base64.RawStdEncoding.DecodeString(enc); err == nil {
+		return string(b), nil
+	}
+	if b, err := base64.StdEncoding.DecodeString(enc); err == nil {
+		return string(b), nil
+	}
+	return "", errors.New("invalid base64 token")
 }
