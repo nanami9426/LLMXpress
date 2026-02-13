@@ -95,24 +95,36 @@ var (
 	// 配置仍可通过 InitRateLimitConfig 主动刷新。
 	rateLimitConfig   RateLimitConfig
 	rateLimitConfigMu sync.RWMutex
+	// rateLimitNowFn 允许单测注入时间，生产环境使用 UTC 当前时间。
+	rateLimitNowFn = func() time.Time {
+		return time.Now().UTC()
+	}
 )
 
 // consumeChatCompletionQuotaScript:
-// 在 Redis 中原子执行“检查 + 扣减”，保证双维度 all-or-none：
-// 1) 先检查 request/token 两个维度是否会超限；
-// 2) 任何一个超限都直接返回，不做扣减；
-// 3) 都未超限时再同时扣减，并为新窗口 key 设置 TTL。
+// 在 Redis 中原子执行“检查 + 扣减”，保证 request 固定窗、token 固定窗、
+// request 令牌桶三者 all-or-none：
+// 1) 先按顺序检查 request 固定窗 -> token 固定窗 -> request 令牌桶；
+// 2) 任一维度超限都直接返回，不做任何扣减；
+// 3) 都未超限时再统一提交，并设置 TTL。
 //
 // 参数约定：
 // KEYS[1] = request key
 // KEYS[2] = token key
+// KEYS[3] = request bucket key
 // ARGV[1] = req_enabled (0/1)
 // ARGV[2] = req_limit
 // ARGV[3] = req_cost
 // ARGV[4] = tok_enabled (0/1)
 // ARGV[5] = tok_limit
 // ARGV[6] = tok_cost
-// ARGV[7] = ttl_seconds
+// ARGV[7] = fixed_ttl_seconds
+// ARGV[8] = bucket_enabled (0/1)
+// ARGV[9] = bucket_capacity
+// ARGV[10] = bucket_cost
+// ARGV[11] = bucket_window_ms
+// ARGV[12] = now_ms
+// ARGV[13] = bucket_ttl_seconds
 //
 // 返回：
 // {1, ""}            => 通过
@@ -125,7 +137,15 @@ local req_cost = tonumber(ARGV[3])
 local tok_enabled = tonumber(ARGV[4])
 local tok_limit = tonumber(ARGV[5])
 local tok_cost = tonumber(ARGV[6])
-local ttl = tonumber(ARGV[7])
+local fixed_ttl = tonumber(ARGV[7])
+local bucket_enabled = tonumber(ARGV[8])
+local bucket_capacity = tonumber(ARGV[9])
+local bucket_cost = tonumber(ARGV[10])
+local bucket_window_ms = tonumber(ARGV[11])
+local now_ms = tonumber(ARGV[12])
+local bucket_ttl = tonumber(ARGV[13])
+local bucket_after_tokens = nil
+local bucket_after_ts = nil
 
 if req_enabled == 1 then
 	local req_current = tonumber(redis.call("GET", KEYS[1]) or "0")
@@ -141,18 +161,54 @@ if tok_enabled == 1 then
 	end
 end
 
+if bucket_enabled == 1 then
+	local state = redis.call("HMGET", KEYS[3], "tokens", "ts_ms")
+	local tokens = tonumber(state[1])
+	local ts = tonumber(state[2])
+
+	if tokens == nil then
+		tokens = bucket_capacity
+	end
+	if ts == nil then
+		ts = now_ms
+	end
+	if ts > now_ms then
+		ts = now_ms
+	end
+
+	local elapsed = now_ms - ts
+	if elapsed > 0 then
+		tokens = tokens + (elapsed * bucket_capacity / bucket_window_ms)
+		if tokens > bucket_capacity then
+			tokens = bucket_capacity
+		end
+	end
+
+	if tokens < bucket_cost then
+		return {0, "request"}
+	end
+
+	bucket_after_tokens = tokens - bucket_cost
+	bucket_after_ts = now_ms
+end
+
 if req_enabled == 1 then
 	local req_after = redis.call("INCRBY", KEYS[1], req_cost)
 	if tonumber(req_after) == req_cost then
-		redis.call("EXPIRE", KEYS[1], ttl)
+		redis.call("EXPIRE", KEYS[1], fixed_ttl)
 	end
 end
 
 if tok_enabled == 1 then
 	local tok_after = redis.call("INCRBY", KEYS[2], tok_cost)
 	if tonumber(tok_after) == tok_cost then
-		redis.call("EXPIRE", KEYS[2], ttl)
+		redis.call("EXPIRE", KEYS[2], fixed_ttl)
 	end
+end
+
+if bucket_enabled == 1 then
+	redis.call("HSET", KEYS[3], "tokens", tostring(bucket_after_tokens), "ts_ms", tostring(bucket_after_ts))
+	redis.call("EXPIRE", KEYS[3], bucket_ttl)
 end
 
 return {1, ""}
@@ -253,6 +309,12 @@ func BuildRateLimitWindowKeys(cfg RateLimitConfig, userID int64, now time.Time) 
 	return reqKey, tokKey, windowID
 }
 
+// BuildRateLimitRequestBucketKey 生成 request 令牌桶状态 key。
+// key 格式：<prefix>:reqb:<user_id>。
+func BuildRateLimitRequestBucketKey(cfg RateLimitConfig, userID int64) string {
+	return fmt.Sprintf("%s:reqb:%d", cfg.RedisPrefix, userID)
+}
+
 // ConsumeChatCompletionQuota 执行一次 chat/completions 的双维度扣费检查。
 // 行为要点：
 // 1) request/token 两个维度都关闭时直接放行；
@@ -272,23 +334,45 @@ func ConsumeChatCompletionQuota(ctx context.Context, userID int64, reqCost int64
 		return errors.New("redis not initialized")
 	}
 
-	reqKey, tokKey, _ := BuildRateLimitWindowKeys(cfg, userID, time.Now().UTC())
-	ttlSeconds := cfg.WindowSeconds * 2
-	if ttlSeconds <= 0 {
-		ttlSeconds = defaultRateLimitWindowSeconds * 2
+	now := rateLimitNowFn().UTC()
+	reqKey, tokKey, _ := BuildRateLimitWindowKeys(cfg, userID, now)
+	reqBucketKey := BuildRateLimitRequestBucketKey(cfg, userID)
+
+	fixedTTLSeconds := cfg.WindowSeconds * 2
+	if fixedTTLSeconds <= 0 {
+		fixedTTLSeconds = defaultRateLimitWindowSeconds * 2
 	}
+
+	bucketEnabled := reqEnabled
+	bucketCapacity := cfg.RequestPerMin
+	if bucketCapacity < 0 {
+		bucketCapacity = 0
+	}
+	bucketWindowMs := cfg.WindowSeconds * 1000
+	if bucketWindowMs <= 0 {
+		bucketWindowMs = defaultRateLimitWindowSeconds * 1000
+	}
+	bucketCost := reqCost
+	bucketNowMs := now.UnixMilli()
+	bucketTTLSeconds := fixedTTLSeconds
 
 	res, err := consumeChatCompletionQuotaScript.Run(
 		ctx,
 		RDB,
-		[]string{reqKey, tokKey},
+		[]string{reqKey, tokKey, reqBucketKey},
 		boolToInt(reqEnabled),
 		cfg.RequestPerMin,
 		reqCost,
 		boolToInt(tokEnabled),
 		cfg.TokenPerMin,
 		tokenCost,
-		ttlSeconds,
+		fixedTTLSeconds,
+		boolToInt(bucketEnabled),
+		bucketCapacity,
+		bucketCost,
+		bucketWindowMs,
+		bucketNowMs,
+		bucketTTLSeconds,
 	).Result()
 	if err != nil {
 		return err

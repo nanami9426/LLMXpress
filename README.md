@@ -56,13 +56,18 @@ curl http://localhost:5000/healthz
 - `rate_limit.redis_prefix`：Redis key 前缀（默认 `rl:chat`）
 
 计费规则：
-- 请求级：每次请求成本固定为 `1`
+- 请求级（叠加控制）：
+  - 固定窗口：每次请求成本固定为 `1`，窗口配额由 `request_per_min` 决定。
+  - 令牌桶（仅请求数）：容量 `capacity = request_per_min`，补充速率 `refill = request_per_min / window_seconds`（token/s）。
+  - 令牌更新公式：`tokens = min(capacity, tokens + elapsed_ms * capacity / (window_seconds*1000))`，然后扣除 `1`。
+  - 上述两层都通过才放行；任一层触发限流都返回 `dimension=request`。
 - token 级：`cost = ceil((prompt_tokens_est + max_tokens) / K)`，其中 `prompt_tokens_est` 按本次请求 `messages` 文本字节估算（`ceil(bytes/4)`，不包含会话历史拼接）
 
 request 级计算示例：
-- 假设配置：`request_per_min=2`
-- 每次 `POST /v1/chat/completions` 固定消耗 `1`
-- 结果：同一用户在该 60 秒窗口内前 `2` 次可通过，第 `3` 次会触发 `429` 且 `dimension=request`。
+- 假设配置：`request_per_min=2`、`window_seconds=4`。
+- 在窗口末尾连续发起 2 次请求（固定窗与令牌桶都允许）。
+- 切到新窗口后立刻第 3 次请求：固定窗会“看起来可放行”，但令牌桶尚未补足 1 个令牌，会返回 `429` 且 `dimension=request`。
+- 等待约 2 秒（补足 1 个令牌）后再次请求可通过。
 
 token 级计算示例：
 - 假设配置：`token_per_min=12`、`token_k=100`
