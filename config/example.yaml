@@ -15,6 +15,9 @@ jwt:
  secret: xxxxxx
  ttl_h: 170
 
+api_key:
+ pepper: xxxxxx
+
 ws:
  public_channel: pb
 

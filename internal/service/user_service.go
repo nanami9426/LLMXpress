@@ -3,11 +3,19 @@ package service
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/gin-gonic/gin"
 	"github.com/nanami9426/imgo/internal/models"
 	"github.com/nanami9426/imgo/internal/utils"
+)
+
+var (
+	createAPIKeyFn        = models.CreateAPIKey
+	listAPIKeysByUserFn   = models.ListAPIKeysByUser
+	revokeAPIKeyByIDFn    = models.RevokeAPIKeyByIDAndUser
+	generateAPIKeyTokenFn = utils.GenerateAPIKeyToken
 )
 
 type CreateUserReq struct {
@@ -34,6 +42,36 @@ type UserLoginReq struct {
 
 type CheckTokenReq struct {
 	Token string `json:"token" form:"token"`
+}
+
+type CreateAPIKeyReq struct {
+	Name      string `json:"name" form:"name" binding:"required"`
+	ExpiresAt string `json:"expires_at" form:"expires_at"`
+}
+
+type RevokeAPIKeyReq struct {
+	APIKeyID int64 `json:"api_key_id" form:"api_key_id" binding:"required"`
+}
+
+type apiKeyMetaResp struct {
+	APIKeyID   int64   `json:"api_key_id"`
+	Name       string  `json:"name"`
+	Prefix     string  `json:"prefix"`
+	Status     string  `json:"status"`
+	CreatedAt  string  `json:"created_at"`
+	ExpiresAt  *string `json:"expires_at,omitempty"`
+	LastUsedAt *string `json:"last_used_at,omitempty"`
+	LastUsedIP string  `json:"last_used_ip,omitempty"`
+}
+
+type createAPIKeyResp struct {
+	APIKeyID  int64   `json:"api_key_id"`
+	Name      string  `json:"name"`
+	Prefix    string  `json:"prefix"`
+	Key       string  `json:"key"`
+	Status    string  `json:"status"`
+	CreatedAt string  `json:"created_at"`
+	ExpiresAt *string `json:"expires_at,omitempty"`
 }
 
 // @Summary 用户列表
@@ -261,4 +299,158 @@ func CheckToken(c *gin.Context) {
 		"role":    claims.Role,
 		"exp":     exp,
 	})
+}
+
+// @Summary 创建 API Key
+// @Description 为当前登录用户创建一个新的 API Key，完整 key 仅返回一次
+// @Tags users
+// @Produce json
+// @Param Authorization header string true "Bearer JWT"
+// @Param name formData string true "API Key 名称"
+// @Param expires_at formData string false "过期时间 (RFC3339)"
+// @Router /user/create_api_key [post]
+func CreateAPIKey(c *gin.Context) {
+	userID, ok := parseUserID(c)
+	if !ok || userID <= 0 {
+		utils.Fail(c, http.StatusUnauthorized, utils.StatUnauthorized, "token无效或已过期", nil)
+		return
+	}
+
+	req := &CreateAPIKeyReq{}
+	if err := c.ShouldBind(req); err != nil {
+		utils.Fail(c, http.StatusOK, utils.StatInvalidParam, "参数错误", err)
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		utils.Fail(c, http.StatusOK, utils.StatInvalidParam, "name 不能为空", nil)
+		return
+	}
+
+	var expiresAt *time.Time
+	if raw := strings.TrimSpace(req.ExpiresAt); raw != "" {
+		parsed, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			utils.Fail(c, http.StatusOK, utils.StatInvalidParam, "expires_at 格式错误，应为 RFC3339", err)
+			return
+		}
+		parsed = parsed.UTC()
+		expiresAt = &parsed
+	}
+
+	prefix, fullKey, secretHash, err := generateAPIKeyTokenFn()
+	if err != nil {
+		utils.Fail(c, http.StatusOK, utils.StatInternalError, "生成 API Key 失败", err)
+		return
+	}
+
+	apiKey := &models.APIKey{
+		APIKeyID:   utils.GenerateID(),
+		UserID:     userID,
+		Name:       req.Name,
+		Prefix:     prefix,
+		SecretHash: secretHash,
+		Status:     models.APIKeyStatusActive,
+		ExpiresAt:  expiresAt,
+	}
+	if err := createAPIKeyFn(apiKey); err != nil {
+		utils.Fail(c, http.StatusOK, utils.StatDatabaseError, "创建 API Key 失败", err)
+		return
+	}
+
+	utils.Success(c, createAPIKeyResp{
+		APIKeyID:  apiKey.APIKeyID,
+		Name:      apiKey.Name,
+		Prefix:    apiKey.Prefix,
+		Key:       fullKey,
+		Status:    apiKey.Status,
+		CreatedAt: apiKey.CreatedAt.UTC().Format(time.RFC3339Nano),
+		ExpiresAt: formatOptionalTime(apiKey.ExpiresAt),
+	})
+}
+
+// @Summary 获取 API Key 列表
+// @Description 返回当前登录用户拥有的全部 API Key 元数据，不返回完整 key
+// @Tags users
+// @Produce json
+// @Param Authorization header string true "Bearer JWT"
+// @Router /user/api_key_list [post]
+func ListAPIKeys(c *gin.Context) {
+	userID, ok := parseUserID(c)
+	if !ok || userID <= 0 {
+		utils.Fail(c, http.StatusUnauthorized, utils.StatUnauthorized, "token无效或已过期", nil)
+		return
+	}
+
+	list, err := listAPIKeysByUserFn(userID)
+	if err != nil {
+		utils.Fail(c, http.StatusOK, utils.StatDatabaseError, "查询 API Key 列表失败", err)
+		return
+	}
+
+	resp := make([]apiKeyMetaResp, 0, len(list))
+	for _, item := range list {
+		resp = append(resp, buildAPIKeyMetaResp(item))
+	}
+	utils.Success(c, gin.H{"list": resp})
+}
+
+// @Summary 吊销 API Key
+// @Description 吊销当前登录用户的 API Key；已吊销的 key 会按幂等成功处理
+// @Tags users
+// @Produce json
+// @Param Authorization header string true "Bearer JWT"
+// @Param api_key_id formData int64 true "API Key ID"
+// @Router /user/revoke_api_key [post]
+func RevokeAPIKey(c *gin.Context) {
+	userID, ok := parseUserID(c)
+	if !ok || userID <= 0 {
+		utils.Fail(c, http.StatusUnauthorized, utils.StatUnauthorized, "token无效或已过期", nil)
+		return
+	}
+
+	req := &RevokeAPIKeyReq{}
+	if err := c.ShouldBind(req); err != nil {
+		utils.Fail(c, http.StatusOK, utils.StatInvalidParam, "参数错误", err)
+		return
+	}
+	if req.APIKeyID <= 0 {
+		utils.Fail(c, http.StatusOK, utils.StatInvalidParam, "api_key_id 必须大于 0", nil)
+		return
+	}
+
+	found, err := revokeAPIKeyByIDFn(req.APIKeyID, userID)
+	if err != nil {
+		utils.Fail(c, http.StatusOK, utils.StatDatabaseError, "吊销 API Key 失败", err)
+		return
+	}
+	if !found {
+		utils.Fail(c, http.StatusOK, utils.StatNotFound, "API Key不存在", nil)
+		return
+	}
+	utils.SuccessMessage(c, "吊销成功")
+}
+
+func buildAPIKeyMetaResp(apiKey *models.APIKey) apiKeyMetaResp {
+	if apiKey == nil {
+		return apiKeyMetaResp{}
+	}
+	return apiKeyMetaResp{
+		APIKeyID:   apiKey.APIKeyID,
+		Name:       apiKey.Name,
+		Prefix:     apiKey.Prefix,
+		Status:     apiKey.Status,
+		CreatedAt:  apiKey.CreatedAt.UTC().Format(time.RFC3339Nano),
+		ExpiresAt:  formatOptionalTime(apiKey.ExpiresAt),
+		LastUsedAt: formatOptionalTime(apiKey.LastUsedAt),
+		LastUsedIP: apiKey.LastUsedIP,
+	}
+}
+
+func formatOptionalTime(v *time.Time) *string {
+	if v == nil {
+		return nil
+	}
+	formatted := v.UTC().Format(time.RFC3339Nano)
+	return &formatted
 }

@@ -23,7 +23,7 @@ var (
 //
 // 执行流程：
 // 1) 非目标路由直接放行；
-// 2) 从上下文读取 user_id（依赖 AuthMiddleware）；
+// 2) 从上下文读取 principal_id/user_id（依赖鉴权中间件）；
 // 3) 读取限流配置，若两个维度都关闭则放行；
 // 4) 计算请求级和 token 级成本；
 // 5) 调用 Redis 原子脚本检查+扣减；
@@ -36,9 +36,9 @@ func RateLimitMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 鉴权中间件应该已写入 user_id，这里做防御性校验。
-		userID, ok := parseUserIDFromContext(c)
-		if !ok || userID <= 0 {
+		// 鉴权中间件应该已写入 principal_id 或 user_id，这里做防御性校验。
+		principalID, ok := parsePrincipalIDFromContext(c)
+		if !ok || principalID <= 0 {
 			utils.Abort(c, http.StatusUnauthorized, utils.StatUnauthorized, "token无效或已过期", nil)
 			return
 		}
@@ -81,7 +81,7 @@ func RateLimitMiddleware() gin.HandlerFunc {
 			}
 		}
 
-		if err := consumeChatCompletionQuotaFn(c.Request.Context(), userID, reqCost, tokenCost); err != nil {
+		if err := consumeChatCompletionQuotaFn(c.Request.Context(), principalID, reqCost, tokenCost); err != nil {
 			var limitErr *utils.RateLimitExceededError
 			if errors.As(err, &limitErr) {
 				dimension := strings.TrimSpace(string(limitErr.Dimension))
@@ -99,11 +99,18 @@ func RateLimitMiddleware() gin.HandlerFunc {
 				return
 			}
 			// 非超限错误（如 Redis 抖动）按“失败放行”处理，优先保证服务可用性。
-			utils.Log.Errorf("rate limit check failed (fail-open): user_id=%d err=%v", userID, err)
+			utils.Log.Errorf("rate limit check failed (fail-open): principal_id=%d err=%v", principalID, err)
 		}
 
 		c.Next()
 	}
+}
+
+func parsePrincipalIDFromContext(c *gin.Context) (int64, bool) {
+	if principalID, ok := parseInt64ContextKey(c, contextKeyPrincipalID); ok && principalID > 0 {
+		return principalID, true
+	}
+	return parseInt64ContextKey(c, contextKeyUserID)
 }
 
 // restoreRequestBody 把已读的 body 重新挂回请求，避免后续中间件/handler拿到空 body。

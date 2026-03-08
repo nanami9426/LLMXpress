@@ -19,14 +19,15 @@ var AllowedOrigins = map[string]struct{}{
 }
 
 var (
-	DB               *gorm.DB
-	RDB              *redis.Client
-	Ctx              = context.Background()
-	WSPublishKey     string
-	DefaultJWTSecret string
-	DefaultJWTTTL    time.Duration
-	TokenVersionMax  uint
-	LoginDeviceMax   uint
+	DB                  *gorm.DB
+	RDB                 *redis.Client
+	Ctx                 = context.Background()
+	WSPublishKey        string
+	DefaultJWTSecret    string
+	DefaultAPIKeyPepper string
+	DefaultJWTTTL       time.Duration
+	TokenVersionMax     uint
+	LoginDeviceMax      uint
 )
 
 func InitParam() {
@@ -35,9 +36,13 @@ func InitParam() {
 
 	// auth.go
 	DefaultJWTSecret = V.GetString("jwt.secret")
+	DefaultAPIKeyPepper = V.GetString("api_key.pepper")
 	TokenVersionMax = V.GetUint("token_version_max.n")
 	LoginDeviceMax = V.GetUint("login_device_max.n")
 	DefaultJWTTTL = time.Duration(V.GetUint("jwt.ttl_h")) * time.Hour
+	if DefaultAPIKeyPepper == "" {
+		panic("api_key.pepper is required")
+	}
 
 	// rate_limit.go
 	InitRateLimitConfig()

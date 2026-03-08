@@ -5,6 +5,7 @@ LLMXpress 是一个基于 Go + Gin 的后端服务，集成了用户系统、JWT
 
 **Features**
 - 用户管理：注册、登录、更新、删除、token 校验。
+- API Key：支持为当前登录用户创建、列出、吊销程序调用凭证。
 - JWT 鉴权：支持 `Authorization: Bearer <token>` 或 `token` 查询参数。
 - vLLM 代理：提供 OpenAI 兼容的 `/v1` 接口，并将请求转发到上游。
 - 用量统计：记录 API 调用、Token 数、响应延迟与状态码。
@@ -43,6 +44,7 @@ curl http://localhost:5000/healthz
 - `mysql.host` / `mysql.port` / `mysql.user` / `mysql.password` / `mysql.db`
 - `redis.host` / `redis.port` / `redis.password` / `redis.db`
 - `jwt.secret` / `jwt.ttl_h`
+- `api_key.pepper`
 - `ws.public_channel`
 - `token_version_max.n`
 - `login_device_max.n`
@@ -92,6 +94,9 @@ token 级计算示例：
 - `POST /user/update_user`
 - `POST /user/user_login`
 - `POST /user/check_token`
+- `POST /user/create_api_key`
+- `POST /user/api_key_list`
+- `POST /user/revoke_api_key`
 
 用量统计：
 - `POST /usage/stats`
@@ -107,6 +112,15 @@ vLLM 代理（需要鉴权）：
 - `DELETE /v1/conversations/:conversation_id`
 - `ANY /v1/:path`
 - `ANY /v1/:path/*any`
+
+`/v1` 鉴权优先级：
+- `Authorization: Bearer sk_<public>.<secret>` 走 API Key 鉴权（仅支持 Header，不支持 query 参数）
+- 其他 `Authorization: Bearer <JWT>` 或 `?token=<JWT>` 继续走 JWT 鉴权
+
+API Key 管理接口说明：
+- `POST /user/create_api_key`：仅接受登录用户的 JWT，请求参数 `name` 必填，`expires_at` 可选（RFC3339）；完整 API Key 只会在创建成功时返回一次
+- `POST /user/api_key_list`：仅返回当前用户的 API Key 元数据，不返回完整 key 或 `secret_hash`
+- `POST /user/revoke_api_key`：请求参数 `api_key_id`，已吊销 key 按幂等成功处理
 
 会话续聊扩展（网关自定义字段）：
 - 在 `POST /v1/chat/completions` 的 JSON body 中可选传：
@@ -131,6 +145,7 @@ vLLM 代理（需要鉴权）：
 
 **Usage Logging**
 - `/v1` 相关请求会通过 `APILoggingMiddleware` 写入 `api_usage` 表。
+- API Key 调用会额外记录 `api_key_id` 与 `auth_type=api_key`；JWT 调用记录 `auth_type=jwt`。
 - 支持从 OpenAI 风格 JSON 或 SSE 流中解析 Token 使用情况。
 - `/v1/chat/completions` 请求会自动写入会话历史（`llm_conversation`、`llm_conversation_message`）。
 

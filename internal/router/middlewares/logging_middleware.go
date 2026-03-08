@@ -3,13 +3,15 @@ package middlewares
 import (
 	"bytes"
 	"encoding/json"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nanami9426/imgo/internal/models"
 	"github.com/nanami9426/imgo/internal/utils"
 )
+
+var createAPIUsageFn = models.CreateAPIUsage
 
 func shouldLogAPIPath(path string) bool {
 	return path == "/v1/chat/completions"
@@ -44,23 +46,12 @@ func APILoggingMiddleware() gin.HandlerFunc {
 		latency := time.Since(startTime).Milliseconds()
 
 		// 提取用户信息
-		userID := int64(0)
-		if v, ok := c.Get("user_id"); ok {
-			switch val := v.(type) {
-			case int64:
-				userID = val
-			case int:
-				userID = int64(val)
-			case uint:
-				userID = int64(val)
-			case uint64:
-				userID = int64(val)
-			case float64:
-				userID = int64(val)
-			case string:
-				if parsed, err := strconv.ParseInt(val, 10, 64); err == nil {
-					userID = parsed
-				}
+		userID, _ := parseInt64ContextKey(c, contextKeyUserID)
+		apiKeyID, hasAPIKeyID := parseInt64ContextKey(c, contextKeyAPIKeyID)
+		authType := ""
+		if v, ok := c.Get(contextKeyAuthType); ok {
+			if s, ok := v.(string); ok {
+				authType = strings.TrimSpace(s)
 			}
 		}
 
@@ -70,9 +61,15 @@ func APILoggingMiddleware() gin.HandlerFunc {
 			responseSize = 0
 		}
 
+		var usageAPIKeyID *int64
+		if hasAPIKeyID && apiKeyID > 0 {
+			usageAPIKeyID = &apiKeyID
+		}
 		usage := &models.APIUsage{
 			UsageID:       utils.GenerateID(),
 			UserID:        userID,
+			APIKeyID:      usageAPIKeyID,
+			AuthType:      authType,
 			Endpoint:      c.Request.URL.Path,
 			RequestMethod: c.Request.Method,
 			StatusCode:    c.Writer.Status(),
@@ -85,7 +82,7 @@ func APILoggingMiddleware() gin.HandlerFunc {
 		extractTokenInfo(writer.body, usage)
 
 		// 记录到数据库
-		if err := models.CreateAPIUsage(usage); err != nil {
+		if err := createAPIUsageFn(usage); err != nil {
 			utils.Log.Errorf("failed to create api usage record: %v", err)
 		}
 	}
