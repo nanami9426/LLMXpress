@@ -28,6 +28,8 @@ var (
 	DefaultJWTTTL       time.Duration
 	TokenVersionMax     uint
 	LoginDeviceMax      uint
+	UpstreamBaseURL     string
+	UpstreamAPIKey      string
 )
 
 func InitParam() {
@@ -46,6 +48,8 @@ func InitParam() {
 
 	// rate_limit.go
 	InitRateLimitConfig()
+	UpstreamBaseURL = V.GetString("proxy.upstream_base_url")
+	UpstreamAPIKey = V.GetString("proxy.upstream_api_key")
 }
 
 func InitConfig() {

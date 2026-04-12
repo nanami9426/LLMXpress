@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -14,8 +15,41 @@ import (
 	"github.com/nanami9426/imgo/internal/utils"
 )
 
+func rewriteUpstreamHeaders(header http.Header) {
+	header.Del("Host")
+	header.Del("Accept-Encoding")
+
+	apiKey := strings.TrimSpace(utils.UpstreamAPIKey)
+	if apiKey == "" {
+		// 不把网关自身 JWT / API Key 透传给第三方上游。
+		header.Del("Authorization")
+		return
+	}
+
+	header.Set("Authorization", "Bearer "+apiKey)
+}
+
+func buildUpstreamURL(target *url.URL, requestURL *url.URL) string {
+	upstreamURL := *target
+	basePath := strings.TrimSuffix(target.Path, "/")
+	requestPath := strings.TrimPrefix(requestURL.Path, "/")
+	switch {
+	case basePath == "":
+		upstreamURL.Path = "/" + requestPath
+	case requestPath == "":
+		upstreamURL.Path = basePath
+	default:
+		upstreamURL.Path = path.Join(basePath, requestPath)
+		if !strings.HasPrefix(upstreamURL.Path, "/") {
+			upstreamURL.Path = "/" + upstreamURL.Path
+		}
+	}
+	upstreamURL.RawQuery = requestURL.RawQuery
+	return upstreamURL.String()
+}
+
 func ProxyToVLLM() gin.HandlerFunc {
-	upstream := "http://127.0.0.1:8000"
+	upstream := utils.UpstreamBaseURL
 	target, err := url.Parse(upstream)
 	if err != nil || target.Scheme == "" || target.Host == "" {
 		// 启动时配置有问题，直接返回handler，所有请求500
@@ -25,6 +59,12 @@ func ProxyToVLLM() gin.HandlerFunc {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		rewriteUpstreamHeaders(req.Header)
+		req.Host = target.Host
+	}
 	proxy.FlushInterval = 50 * time.Millisecond
 	proxy.Transport = &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -56,7 +96,7 @@ func ProxyToVLLM() gin.HandlerFunc {
 }
 
 func ChatCompletionsHandler() gin.HandlerFunc {
-	upstream := "http://127.0.0.1:8000"
+	upstream := utils.UpstreamBaseURL
 	target, err := url.Parse(upstream)
 	if err != nil || target.Scheme == "" || target.Host == "" {
 		// 启动时配置有问题，直接返回handler，所有请求500
@@ -86,14 +126,10 @@ func ChatCompletionsHandler() gin.HandlerFunc {
 		Transport: transport,
 	}
 	return func(c *gin.Context) {
-		upstreamURL := *target
-		upstreamURL.Path = c.Request.URL.Path
-		upstreamURL.RawQuery = c.Request.URL.RawQuery
-
 		req, err := http.NewRequestWithContext(
 			c.Request.Context(),
 			c.Request.Method,
-			upstreamURL.String(),
+			buildUpstreamURL(target, c.Request.URL),
 			c.Request.Body,
 		)
 		if err != nil {
@@ -102,7 +138,7 @@ func ChatCompletionsHandler() gin.HandlerFunc {
 		}
 
 		req.Header = c.Request.Header.Clone()
-		req.Header.Del("Accept-Encoding")
+		rewriteUpstreamHeaders(req.Header)
 		req.ContentLength = c.Request.ContentLength
 		if userID, ok := c.Get("user_id"); ok {
 			req.Header.Set("X-User-ID", fmt.Sprintf("%v", userID))

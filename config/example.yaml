@@ -24,6 +24,9 @@ ws:
 token_version_max:
  n: 1000
 
+upstream_base_url: https://api.openai.com
+upstream_api_key: sk-xxxxxx
+
 rate_limit:
  request_per_min: 15
  token_per_min: 150

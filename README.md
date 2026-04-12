@@ -48,6 +48,8 @@ curl http://localhost:5000/healthz
 - `ws.public_channel`
 - `token_version_max.n`
 - `login_device_max.n`
+- `upstream_base_url`
+- `upstream_api_key`
 
 限流配置（`config/app.yaml`，针对 `POST /v1/chat/completions`）：
 - `rate_limit.request_per_min`：请求级配额（默认 `0`，`<=0` 表示关闭）
@@ -159,4 +161,4 @@ swag init -g main.go -o docs
 
 **Development Notes**
 - 生成表结构脚本依赖 `.env` 中的 MySQL 配置（参见 `test/test_gorm.go`）。
-- vLLM 代理上游地址目前为硬编码，如需配置化可考虑引入环境变量或配置项。
+- `/v1/*` 上游地址和上游 API Key 通过 `config/app.yaml` 中的 `upstream_base_url` / `upstream_api_key` 配置。
