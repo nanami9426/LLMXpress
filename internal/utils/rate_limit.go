@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -130,93 +131,16 @@ var (
 // {1, ""}            => 通过
 // {0, "request"}     => 请求级超限
 // {0, "token"}       => token 级超限
-var consumeChatCompletionQuotaScript = redis.NewScript(`
-local req_enabled = tonumber(ARGV[1])
-local req_limit = tonumber(ARGV[2])
-local req_cost = tonumber(ARGV[3])
-local tok_enabled = tonumber(ARGV[4])
-local tok_limit = tonumber(ARGV[5])
-local tok_cost = tonumber(ARGV[6])
-local fixed_ttl = tonumber(ARGV[7])
-local bucket_enabled = tonumber(ARGV[8])
-local bucket_capacity = tonumber(ARGV[9])
-local bucket_cost = tonumber(ARGV[10])
-local bucket_window_ms = tonumber(ARGV[11])
-local now_ms = tonumber(ARGV[12])
-local bucket_ttl = tonumber(ARGV[13])
-local bucket_after_tokens = nil
-local bucket_after_ts = nil
-
-if req_enabled == 1 then
-	local req_current = tonumber(redis.call("GET", KEYS[1]) or "0")
-	if req_current + req_cost > req_limit then
-		return {0, "request"}
-	end
-end
-
-if tok_enabled == 1 then
-	local tok_current = tonumber(redis.call("GET", KEYS[2]) or "0")
-	if tok_current + tok_cost > tok_limit then
-		return {0, "token"}
-	end
-end
-
-if bucket_enabled == 1 then
-	local state = redis.call("HMGET", KEYS[3], "tokens", "ts_ms")
-	local tokens = tonumber(state[1])
-	local ts = tonumber(state[2])
-
-	if tokens == nil then
-		tokens = bucket_capacity
-	end
-	if ts == nil then
-		ts = now_ms
-	end
-	if ts > now_ms then
-		ts = now_ms
-	end
-
-	local elapsed = now_ms - ts
-	if elapsed > 0 then
-		tokens = tokens + (elapsed * bucket_capacity / bucket_window_ms)
-		if tokens > bucket_capacity then
-			tokens = bucket_capacity
-		end
-	end
-
-	if tokens < bucket_cost then
-		return {0, "request"}
-	end
-
-	bucket_after_tokens = tokens - bucket_cost
-	bucket_after_ts = now_ms
-end
-
-if req_enabled == 1 then
-	local req_after = redis.call("INCRBY", KEYS[1], req_cost)
-	if tonumber(req_after) == req_cost then
-		redis.call("EXPIRE", KEYS[1], fixed_ttl)
-	end
-end
-
-if tok_enabled == 1 then
-	local tok_after = redis.call("INCRBY", KEYS[2], tok_cost)
-	if tonumber(tok_after) == tok_cost then
-		redis.call("EXPIRE", KEYS[2], fixed_ttl)
-	end
-end
-
-if bucket_enabled == 1 then
-	redis.call("HSET", KEYS[3], "tokens", tostring(bucket_after_tokens), "ts_ms", tostring(bucket_after_ts))
-	redis.call("EXPIRE", KEYS[3], bucket_ttl)
-end
-
-return {1, ""}
-`)
+var consumeChatCompletionQuotaScript *redis.Script
 
 // InitRateLimitConfig 在服务启动阶段加载并缓存限流配置。
 func InitRateLimitConfig() {
 	setRateLimitConfig(loadRateLimitConfigFromViper())
+	luaBytes, err := os.ReadFile("scripts/rate_limite.lua")
+	if err != nil {
+		panic(err)
+	}
+	consumeChatCompletionQuotaScript = redis.NewScript(string(luaBytes))
 }
 
 // GetRateLimitConfig 返回当前可用配置。
